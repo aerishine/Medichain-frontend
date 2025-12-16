@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Users, FileText, Clock, Activity, Plus, Search, User, Stethoscope, BriefcaseMedical, Calendar } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
-import { useState } from 'react'
+import React, { useState } from 'react'
 
 export default function DoctorDashboard() {
     return (
@@ -173,26 +173,129 @@ function StatCard({ title, value, icon: Icon, trend, iconColor, isWarning }: any
     )
 }
 
+const MOCK_PATIENTS = [
+    { name: "Alex Johnson", address: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F" },
+    { name: "Maria Garcia", address: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC" },
+    { name: "John Doe", address: "0x90F79bf6EB2c4f870365E785982E1f101E93b906" },
+];
+
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { MEDICHAIN_ADDRESS, MEDICHAIN_ABI } from '@/config/contracts'
+import { stringToHex } from 'viem'
+import { toast } from 'sonner'
+
 function DispenseForm() {
+    const [address, setAddress] = useState('')
+    const [name, setName] = useState('')
+    const [medicine, setMedicine] = useState('BATCH-2023-001') // Default mock batch
+    const [notes, setNotes] = useState('')
+
+    const { writeContract, data: hash, isPending } = useWriteContract()
+    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+    // Reset form on success
+    React.useEffect(() => {
+        if (isSuccess) {
+            toast.success("Medicine dispensed successfully!")
+            setAddress('')
+            setName('')
+            setNotes('')
+        }
+    }, [isSuccess])
+
+    const handlePatientSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedAddress = e.target.value;
+        const patient = MOCK_PATIENTS.find(p => p.address === selectedAddress);
+
+        if (patient) {
+            setAddress(patient.address);
+            setName(patient.name);
+        } else {
+            setAddress(selectedAddress);
+            if (selectedAddress === "") {
+                setAddress("");
+                setName("");
+            }
+        }
+    };
+
+    const handleDispense = (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!address) {
+            toast.error("Please select or enter a patient address")
+            return
+        }
+
+        try {
+            // Using the selected batch ID as the drugCode
+            // Ensuring it's 32 bytes
+            const drugCode = stringToHex(medicine, { size: 32 })
+
+            writeContract({
+                address: MEDICHAIN_ADDRESS,
+                abi: MEDICHAIN_ABI,
+                functionName: 'transferDrug',
+                args: [drugCode, address as `0x${string}`, notes],
+            })
+        } catch (error) {
+            console.error(error)
+            toast.error("Failed to initiate transaction")
+        }
+    }
+
     return (
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleDispense}>
+            {/* Patient Selector */}
             <div className="space-y-2">
-                <label className="text-sm font-medium">Patient Wallet Address</label>
-                <div className="flex gap-2">
-                    <Input placeholder="0x..." className="font-mono bg-slate-50" />
-                    <Button variant="outline" type="button"><Search className="w-4 h-4" /></Button>
+                <label className="text-sm font-medium">Select Registered Patient</label>
+                <select
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={handlePatientSelect}
+                    defaultValue=""
+                >
+                    <option value="">-- Choose a Patient --</option>
+                    {MOCK_PATIENTS.map((p, i) => (
+                        <option key={i} value={p.address}>{p.name} ({p.address.slice(0, 6)}...)</option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Patient Wallet Address</label>
+                    <div className="flex gap-2">
+                        <Input
+                            placeholder="0x..."
+                            className="font-mono bg-slate-50"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            disabled={isPending || isConfirming}
+                        />
+                        <Button variant="outline" type="button"><Search className="w-4 h-4" /></Button>
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Patient Name</label>
+                    <Input
+                        placeholder="John Doe"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        disabled={isPending || isConfirming}
+                    />
                 </div>
             </div>
-            <div className="space-y-2">
-                <label className="text-sm font-medium">Patient Name (Optional)</label>
-                <Input placeholder="John Doe" />
-            </div>
+
             <div className="space-y-2">
                 <label className="text-sm font-medium">Select Medicine</label>
-                <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option>Amoxicillin 500mg (Batch #2023-001)</option>
-                    <option>Ibuprofen 400mg (Batch #2023-004)</option>
-                    <option>Paracetamol 500mg (Batch #2023-012)</option>
+                <select
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={medicine}
+                    onChange={(e) => setMedicine(e.target.value)}
+                    disabled={isPending || isConfirming}
+                >
+                    <option value="BATCH-2023-001">Amoxicillin 500mg (Batch #2023-001)</option>
+                    <option value="BATCH-2023-004">Ibuprofen 400mg (Batch #2023-004)</option>
+                    <option value="BATCH-2023-012">Paracetamol 500mg (Batch #2023-012)</option>
                 </select>
             </div>
             <div className="space-y-2">
@@ -200,13 +303,29 @@ function DispenseForm() {
                 <textarea
                     className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter diagnosis details..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    disabled={isPending || isConfirming}
                 />
             </div>
 
             <div className="pt-4">
-                <Button className="w-full bg-blue-600 hover:bg-blue-700">
-                    <BriefcaseMedical className="w-4 h-4 mr-2" /> Dispense Medicine
+                <Button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    disabled={isPending || isConfirming}
+                >
+                    {isPending ? 'Confirm in Wallet...' : isConfirming ? 'Processing...' : (
+                        <>
+                            <BriefcaseMedical className="w-4 h-4 mr-2" /> Dispense Medicine
+                        </>
+                    )}
                 </Button>
+                {hash && (
+                    <div className="mt-2 text-xs text-center text-slate-500 truncate">
+                        Tx: {hash}
+                    </div>
+                )}
             </div>
         </form>
     )

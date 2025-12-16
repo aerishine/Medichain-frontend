@@ -60,29 +60,50 @@ export default function PatientDashboard() {
                             <TabsTrigger value="history">Visit History</TabsTrigger>
                         </TabsList>
 
+                        import {useReadContract, useAccount} from 'wagmi'
+                        import {MEDICHAIN_ADDRESS, MEDICHAIN_ABI} from '@/config/contracts'
+                        import {hexToString} from 'viem'
+
+                        // ... (Inside the component)
+
+                        const {address} = useAccount()
+
+                        // Fetch user's medicines (naive approach: iterate or use a specific getter if available)
+                        // The current ABI only has `getCurrentHolder` for a drugCode, not "getDrugsByOwner".
+                        // However, if we assume we know the IDs (or just show the one we just dispensed), we can try to read.
+                        // Since the ABI is limited, we might not be able to "list" all medicines directly without an indexed event graph,
+                        // but for this demo, let's at least try to read the specific batch we dispensed: BATCH-2023-001.
+
+                        const {data: currentHolder } = useReadContract({
+                            address: MEDICHAIN_ADDRESS,
+                        abi: MEDICHAIN_ABI,
+                        functionName: 'getCurrentHolder',
+                        args: ['0x42415443482d323032332d303031000000000000000000000000000000000000'], // Hex for BATCH-2023-001
+    })
+
+                        // Note: The new ABI is very simple. It doesn't have a "getMyInventory" function.
+                        // Realistically, to show a "list of medicines", we'd need an indexer or a better contract.
+                        // For now, I will explain this limitation to the user, but still show how to connect the "Wallet Status".
+
+                        // ...
+
                         <TabsContent value="medicines">
                             <div className="space-y-4">
-                                <MedicineNFTCard
-                                    name="Amoxicillin 500mg"
-                                    type="Antibiotic"
-                                    batch="BATCH-2023-001"
-                                    expiry="Exp: 10/2026"
-                                    image="💊"
-                                />
-                                <MedicineNFTCard
-                                    name="Ibuprofen 400mg"
-                                    type="Pain Relief"
-                                    batch="BATCH-2023-004"
-                                    expiry="Exp: 12/2025"
-                                    image="💊"
-                                />
-                                <MedicineNFTCard
-                                    name="Paracetamol 500mg"
-                                    type="Analgesic"
-                                    batch="BATCH-2023-012"
-                                    expiry="Exp: 08/2025"
-                                    image="💊"
-                                />
+                                {currentHolder && currentHolder === address ? (
+                                    <MedicineNFTCard
+                                        name="Amoxicillin 500mg"
+                                        type="Antibiotic"
+                                        batch="BATCH-2023-001"
+                                        expiry="Active"
+                                        image="💊"
+                                    />
+                                ) : (
+                                    <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500">
+                                        <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                        <p>No medicines found in your wallet.</p>
+                                        <p className="text-xs mt-1">(Check if Doctor dispensed BATCH-2023-001 to you)</p>
+                                    </div>
+                                )}
                             </div>
                         </TabsContent>
 
