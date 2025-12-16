@@ -1,5 +1,7 @@
 'use client'
 
+import React from 'react'
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -7,6 +9,10 @@ import { Input } from '@/components/ui/Input'
 import { Package, Truck, AlertCircle, TrendingUp, Plus, RefreshCw, Box, ClipboardList, Syringe, QrCode } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useState } from 'react'
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { MEDICHAIN_ADDRESS, MEDICHAIN_ABI } from '@/config/contracts'
+import { stringToHex } from 'viem'
+import { toast } from 'sonner'
 
 export default function ManufacturerDashboard() {
     return (
@@ -262,58 +268,168 @@ function BatchesTable() {
     )
 }
 
+
+
+
+// ... existing StatCard, InventoryTable, BatchesTable ...
+
 function RegisterMedicineForm() {
+    const [name, setName] = useState('')
+    const [sku, setSku] = useState('')
+
+    const { writeContract, data: hash, isPending } = useWriteContract()
+    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+    React.useEffect(() => {
+        if (isSuccess) {
+            toast.success("Medicine Type Registered on Blockchain!")
+            setName('')
+            setSku('')
+        }
+    }, [isSuccess])
+
+    const handleRegister = (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!name || !sku) {
+            toast.error("Please fill all fields")
+            return
+        }
+
+        try {
+            // Using SKU as the unique drugCode for the 'Type'
+            const drugCode = stringToHex(sku, { size: 32 })
+
+            writeContract({
+                address: MEDICHAIN_ADDRESS,
+                abi: MEDICHAIN_ABI,
+                functionName: 'addDrug',
+                args: [drugCode, name],
+            })
+        } catch (error) {
+            console.error(error)
+            toast.error("Failed to register medicine")
+        }
+    }
+
     return (
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleRegister}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <label className="text-sm font-medium">Medicine Name</label>
-                    <Input placeholder="e.g. Amoxicillin 500mg" />
+                    <Input
+                        placeholder="e.g. Amoxicillin 500mg"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        disabled={isPending || isConfirming}
+                    />
                 </div>
                 <div className="space-y-2">
                     <label className="text-sm font-medium">SKU / Code</label>
-                    <Input placeholder="e.g. AMX-500" />
+                    <Input
+                        placeholder="e.g. AMX-500"
+                        value={sku}
+                        onChange={(e) => setSku(e.target.value)}
+                        disabled={isPending || isConfirming}
+                    />
                 </div>
             </div>
             <div className="space-y-2">
                 <label className="text-sm font-medium">Active Ingredients</label>
-                <Input placeholder="e.g. Amoxicillin Trihydrate" />
+                <Input placeholder="e.g. Amoxicillin Trihydrate" disabled={true} />
+                <p className="text-xs text-slate-400">Note: Only Name and Code are stored on-chain in this version.</p>
             </div>
             <div className="pt-4">
-                <Button className="w-full bg-blue-600 hover:bg-blue-700">
-                    <Plus className="w-4 h-4 mr-2" /> Register Medicine Blueprint
+                <Button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    disabled={isPending || isConfirming}
+                >
+                    {isPending ? 'Confirming...' : isConfirming ? 'Processing...' : (
+                        <>
+                            <Plus className="w-4 h-4 mr-2" /> Register Medicine Blueprint
+                        </>
+                    )}
                 </Button>
+                {hash && <p className="text-xs text-center text-slate-500 mt-2 truncate">Tx: {hash}</p>}
             </div>
         </form>
     )
 }
 
 function RestockForm() {
+    const [selectedMed, setSelectedMed] = useState('Amoxicillin 500mg')
+    const [batchId, setBatchId] = useState('BATCH-' + Math.floor(Math.random() * 10000))
+
+    const { writeContract, data: hash, isPending } = useWriteContract()
+    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+    React.useEffect(() => {
+        if (isSuccess) {
+            toast.success("Batch Minted & Restocked!")
+            setBatchId('BATCH-' + Math.floor(Math.random() * 10000)) // New random batch
+        }
+    }, [isSuccess])
+
+    const handleRestock = (e: React.FormEvent) => {
+        e.preventDefault()
+
+        try {
+            // In this simple ABI, 'restocking' a batch is effectively just adding another drug entry
+            // with the Batch ID as the code.
+            const drugCode = stringToHex(batchId, { size: 32 })
+
+            writeContract({
+                address: MEDICHAIN_ADDRESS,
+                abi: MEDICHAIN_ABI,
+                functionName: 'addDrug',
+                args: [drugCode, selectedMed],
+            })
+        } catch (error) {
+            console.error(error)
+            toast.error("Failed to restock")
+        }
+    }
+
     return (
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleRestock}>
             <div className="space-y-2">
                 <label className="text-sm font-medium">Select Medicine</label>
-                <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option>Amoxicillin 500mg</option>
-                    <option>Ibuprofen 400mg</option>
-                    <option>Paracetamol 500mg</option>
+                <select
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={selectedMed}
+                    onChange={(e) => setSelectedMed(e.target.value)}
+                    disabled={isPending || isConfirming}
+                >
+                    <option value="Amoxicillin 500mg">Amoxicillin 500mg</option>
+                    <option value="Ibuprofen 400mg">Ibuprofen 400mg</option>
+                    <option value="Paracetamol 500mg">Paracetamol 500mg</option>
                 </select>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <label className="text-sm font-medium">Batch ID</label>
-                    <Input value="BATCH-2025-004" readOnly className="bg-slate-50 font-mono" />
+                    <Input value={batchId} readOnly className="bg-slate-50 font-mono" />
                 </div>
                 <div className="space-y-2">
                     <label className="text-sm font-medium">Quantity to Mint</label>
-                    <Input type="number" placeholder="e.g. 5000" />
+                    <Input type="number" placeholder="e.g. 5000" disabled={true} />
+                    <p className="text-xs text-slate-400">Quantity tracking not supported in current smart contract.</p>
                 </div>
             </div>
 
             <div className="pt-4">
-                <Button className="w-full bg-green-600 hover:bg-green-700">
-                    <QrCode className="w-4 h-4 mr-2" /> Mint Batch NFTs & Restock
+                <Button
+                    type="submit"
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                    disabled={isPending || isConfirming}
+                >
+                    {isPending ? 'Confirming...' : isConfirming ? 'Processing...' : (
+                        <>
+                            <QrCode className="w-4 h-4 mr-2" /> Mint Batch NFTs & Restock
+                        </>
+                    )}
                 </Button>
+                {hash && <p className="text-xs text-center text-slate-500 mt-2 truncate">Tx: {hash}</p>}
             </div>
         </form>
     )

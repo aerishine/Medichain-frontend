@@ -5,8 +5,19 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Package, Calendar, Activity, Heart, ShieldCheck, QrCode, User, Pill } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
+import { useReadContract, useAccount } from 'wagmi'
+import { MEDICHAIN_ADDRESS, MEDICHAIN_ABI } from '@/config/contracts'
+import { hexToString } from 'viem'
 
 export default function PatientDashboard() {
+    const { address } = useAccount()
+    // Fetch user's medicines (naive approach: iterate or use a specific getter if available)
+    const { data: currentHolder } = useReadContract({
+        address: MEDICHAIN_ADDRESS,
+        abi: MEDICHAIN_ABI,
+        functionName: 'getCurrentHolder',
+        args: ['0x42415443482d323032332d303031000000000000000000000000000000000000'], // Hex for BATCH-2023-001
+    })
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -60,13 +71,13 @@ export default function PatientDashboard() {
                             <TabsTrigger value="history">Visit History</TabsTrigger>
                         </TabsList>
 
-                        import {useReadContract, useAccount} from 'wagmi'
-                        import {MEDICHAIN_ADDRESS, MEDICHAIN_ABI} from '@/config/contracts'
-                        import {hexToString} from 'viem'
+
+
+
 
                         // ... (Inside the component)
 
-                        const {address} = useAccount()
+
 
                         // Fetch user's medicines (naive approach: iterate or use a specific getter if available)
                         // The current ABI only has `getCurrentHolder` for a drugCode, not "getDrugsByOwner".
@@ -74,12 +85,7 @@ export default function PatientDashboard() {
                         // Since the ABI is limited, we might not be able to "list" all medicines directly without an indexed event graph,
                         // but for this demo, let's at least try to read the specific batch we dispensed: BATCH-2023-001.
 
-                        const {data: currentHolder } = useReadContract({
-                            address: MEDICHAIN_ADDRESS,
-                        abi: MEDICHAIN_ABI,
-                        functionName: 'getCurrentHolder',
-                        args: ['0x42415443482d323032332d303031000000000000000000000000000000000000'], // Hex for BATCH-2023-001
-    })
+
 
                         // Note: The new ABI is very simple. It doesn't have a "getMyInventory" function.
                         // Realistically, to show a "list of medicines", we'd need an indexer or a better contract.
